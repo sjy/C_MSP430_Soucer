@@ -1,0 +1,129 @@
+/********************************************************************
+//DM430-L型最小系统板4位独立按键测试程序
+//按不同的按键，显示不同的LED灯，具体请看程序
+//调试环境：EW430 V5.30
+//作者：阿迪 www.avrgcc.com
+//时间：2011.09.19
+********************************************************************/
+
+#include <msp430x14x.h>
+
+#define CPU_F ((double)8000000) 
+#define delay_us(x) __delay_cycles((long)(CPU_F*(double)x/1000000.0)) 
+#define delay_ms(x) __delay_cycles((long)(CPU_F*(double)x/1000.0)) 
+
+#define uchar unsigned char
+#define uint  unsigned int
+#define ulong unsigned long
+
+#define KeyPort         P1IN                              //独立键盘接在P10~P13
+#define LED             P3OUT                             //LED灯接在P34、P35上
+
+uchar key;
+
+//*************************************************************************
+//       系统时钟初始化
+//*************************************************************************
+void Clock_Init()
+{
+  uchar i;
+  BCSCTL1&=~XT2OFF;                 //打开XT振荡器
+  BCSCTL2|=SELM1+SELS;              //MCLK为8MHZ，SMCLK为8MHZ
+  do{
+    IFG1&=~OFIFG;                   //清除震荡标志
+    for(i=0;i<100;i++)
+       _NOP();                      //延时等待
+  }
+  while((IFG1&OFIFG)!=0);           //如果标志为1，则继续循环等待
+  IFG1&=~OFIFG; 
+}
+//*************************************************************************
+//      MSP430内部看门狗初始化
+//*************************************************************************
+void WDT_Init()
+{
+   WDTCTL = WDTPW + WDTHOLD;       //关闭看门狗
+}
+
+//*************************************************************************
+//	初始化IO口子程序
+//*************************************************************************
+void Port_init()
+{
+
+  P1SEL = 0x00;                   //P1普通IO功能
+  P1DIR = 0xF0;                   //P10~P13输入模式，外部电路已接上拉电阻
+  P3SEL = 0x00;                   //P3口普通IO功能
+  P3DIR = 0xFF;                   //P3口输出模式
+}
+
+//**********************************************************************
+//	键盘扫描子程序，采用逐键扫描的方式
+//**********************************************************************
+
+uchar Key_Scan(void) 
+{
+  uchar key_check;
+  uchar key_checkin;
+  key_checkin=KeyPort;          	//读取IO口状态，判断是否有键按下
+  key_checkin&= 0x0F;          		//读取IO口状态，判断是否有键按下
+  if(key_checkin!=0x0F)            	//IO口值发生变化则表示有键按下
+    {
+      delay_ms(20);                  	//键盘消抖，延时20MS
+      key_checkin=KeyPort;
+      if(key_checkin!=0x1F)
+        {  
+          key_check=KeyPort;
+          switch (key_check & 0x0F)
+            {
+              case 0x0E:key=1;break;
+              case 0x0D:key=2;break;
+              case 0x0B:key=3;break;
+              case 0x07:key=4;break;
+            }
+          
+        }
+      
+   }
+  else
+   {
+     key=0xFF;        
+   }
+  return key;
+} 
+//*************************************************************************
+//		主程序
+//*************************************************************************
+
+void main(void)
+{     
+  WDT_Init();                            //看门狗设置
+  Clock_Init();                          //系统时钟设置
+  Port_init();                           //系统初始化，设置IO口属性
+  delay_ms(100);                         //延时100ms
+  while(1)
+    {
+      Key_Scan();                       //键盘扫描，看是否有按键按下
+      if(key!=0xff)                     //如果有按键按下，则显示该按键键值1～4
+        {
+	  {
+            switch(key)
+              {
+	        case 1: LED=0xEF;break;  //给不同的键赋键值，键值1，亮1个LED灯D1
+                case 2: LED=0xDF;break;  //给不同的键赋键值，键值2，亮1个LED灯D2
+                case 3: LED=0xCF;break;	 //给不同的键赋键值，键值3，亮2个LED灯D1.D2
+                case 4: LED=0xFF;break;	 //给不同的键赋键值，键值4，亮0个LED灯
+              }
+
+          }
+	
+       }
+     else
+      {
+        //LED=key;              	//没有按键的时候显示上次的键值
+      }
+    }
+
+}
+
+
